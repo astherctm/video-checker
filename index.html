@@ -468,26 +468,46 @@ function checkSpecs(info, file) {
   const sizeMB = file.size / 1024 / 1024;
   const ratio  = info.w / info.h;
   if (info.dur > SPECS.maxSec)                              issues.push({ label:`長度 ${info.dur.toFixed(1)}s`, canFix:false });
-  if (info.w !== SPECS.w || info.h !== SPECS.h)             issues.push({ label:`尺寸 ${info.w}×${info.h}`, canFix:true, type:'resize' });
+  if (info.w !== SPECS.w || info.h !== SPECS.h) {
+    // 只要比例是 9:16，就可以自動縮放（不管是 4K 或其他尺寸）
+    const ratioOk = Math.abs(ratio - ASPECT) <= TOLERANCE;
+    issues.push({ label:`尺寸 ${info.w}×${info.h}`, canFix: ratioOk, type:'resize' });
+  }
   if (Math.abs(ratio - ASPECT) > TOLERANCE)                 issues.push({ label:`比例不符 9:16`, canFix:false });
   if (!/\.mp4$/i.test(file.name))                           issues.push({ label:`格式非 MP4`, canFix:true, type:'format' });
-  if (sizeMB > SPECS.maxMB)                                 issues.push({ label:`大小 ${sizeMB.toFixed(1)}MB`, canFix:false });
+  if (sizeMB > SPECS.maxMB)                                 issues.push({ label:`大小 ${sizeMB.toFixed(1)}MB`, canFix:true, type:'compress' });
   return issues;
 }
 
-async function processVideo(file, needResize) {
+// 估算目標 CRF：二分搜尋壓縮率直到檔案小於 30MB
+async function processVideo(file, needResize, needCompress) {
   await initFFmpeg();
   const inName  = 'in_'  + Date.now() + '.mp4';
-  const outName = 'out_' + Date.now() + '.mp4';
+  const vf = `scale=${SPECS.w}:${SPECS.h}:force_original_aspect_ratio=decrease,pad=${SPECS.w}:${SPECS.h}:(ow-iw)/2:(oh-ih)/2`;
+
   await ffmpeg.writeFile(inName, await fetchFile(file));
-  const args = ['-i', inName, '-c:v', 'libx264', '-crf', '23', '-preset', 'fast', '-c:a', 'aac', '-b:a', '128k'];
-  if (needResize) args.push('-vf', `scale=${SPECS.w}:${SPECS.h}:force_original_aspect_ratio=decrease,pad=${SPECS.w}:${SPECS.h}:(ow-iw)/2:(oh-ih)/2`);
-  args.push(outName);
-  await ffmpeg.exec(args);
-  const data = await ffmpeg.readFile(outName);
+
+  // 決定 CRF：先用 23，若需壓縮則從 28 開始，最多試到 35
+  const crfList = needCompress ? [28, 31, 34, 37] : [23];
+  let outputData = null;
+  let usedCrf = 23;
+
+  for (const crf of crfList) {
+    const outName = 'out_' + Date.now() + '.mp4';
+    const args = ['-i', inName, '-c:v', 'libx264', '-crf', String(crf), '-preset', 'fast', '-c:a', 'aac', '-b:a', '96k'];
+    if (needResize || needCompress) args.push('-vf', vf);
+    args.push(outName);
+    await ffmpeg.exec(args);
+    const data = await ffmpeg.readFile(outName);
+    await ffmpeg.deleteFile(outName);
+    const sizeMB = data.byteLength / 1024 / 1024;
+    outputData = data;
+    usedCrf = crf;
+    if (sizeMB <= SPECS.maxMB) break; // 達標就停
+  }
+
   await ffmpeg.deleteFile(inName);
-  await ffmpeg.deleteFile(outName);
-  return new File([data.buffer], file.name.replace(/\.[^.]+$/, '_fixed.mp4'), { type:'video/mp4' });
+  return new File([outputData.buffer], file.name.replace(/\.[^.]+$/, '_fixed.mp4'), { type:'video/mp4' });
 }
 
 async function uploadToDrive(file, folderId) {
@@ -534,10 +554,13 @@ window.runAll = async function() {
 
     let outputFile = entry.file;
     if (fixable.length > 0) {
+      const needResize   = fixable.some(f => f.type === 'resize' || f.type === 'format');
+      const needCompress = fixable.some(f => f.type === 'compress');
+      const statusLabel  = needCompress ? '壓縮 + 調整尺寸' : '調整尺寸';
       updateStatus(i, 'fixing');
-      setProgress(Math.round(i/total*100), `[${i+1}/${total}] 調整尺寸：${entry.file.name}`);
+      setProgress(Math.round(i/total*100), `[${i+1}/${total}] ${statusLabel}：${entry.file.name}`);
       try {
-        outputFile = await processVideo(entry.file, fixable.some(f => f.type==='resize'));
+        outputFile = await processVideo(entry.file, needResize || needCompress, needCompress);
         files[i].issues = issues.map(iss => ({...iss, fixed:true}));
       } catch(e) {
         files[i].issues = [{ label:'處理失敗', canFix:false, fixed:false }];
