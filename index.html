@@ -387,6 +387,9 @@ function showUserBar(info) {
 // ── FFmpeg ────────────────────────────────────────────────
 async function initFFmpeg() {
   if (ffmpeg) return;
+  if (!crossOriginIsolated) {
+    throw new Error('瀏覽器缺少 SharedArrayBuffer 支援（COOP/COEP）。請改用 Firefox 或確認伺服器有設定正確的 HTTP 標頭。');
+  }
   ffmpeg = new FFmpeg();
   const base = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
   await ffmpeg.load({
@@ -563,7 +566,9 @@ window.runAll = async function() {
         outputFile = await processVideo(entry.file, needResize || needCompress, needCompress);
         files[i].issues = issues.map(iss => ({...iss, fixed:true}));
       } catch(e) {
-        files[i].issues = [{ label:'處理失敗', canFix:false, fixed:false }];
+        const msg = (e && e.message) ? e.message.slice(0,100) : String(e).slice(0,100);
+        console.error('processVideo error:', e);
+        files[i].issues = [{ label:'錯誤：' + msg, canFix:false, fixed:false }];
         updateStatus(i, 'error'); failed++; continue;
       }
     }
