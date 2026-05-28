@@ -387,14 +387,18 @@ function showUserBar(info) {
 // ── FFmpeg ────────────────────────────────────────────────
 async function initFFmpeg() {
   if (ffmpeg) return;
-  if (!crossOriginIsolated) {
-    throw new Error('瀏覽器缺少 SharedArrayBuffer 支援（COOP/COEP）。請改用 Firefox 或確認伺服器有設定正確的 HTTP 標頭。');
-  }
+
   ffmpeg = new FFmpeg();
-  const base = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
+  // 單執行緒版，不需要 SharedArrayBuffer，相容 GitHub Pages
   await ffmpeg.load({
-    coreURL: await toBlobURL(`${base}/ffmpeg-core.js`,   'text/javascript'),
-    wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
+    coreURL: await toBlobURL(
+      'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
+      'text/javascript'
+    ),
+    wasmURL: await toBlobURL(
+      'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm',
+      'application/wasm'
+    ),
   });
 }
 
