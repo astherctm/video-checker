@@ -323,9 +323,10 @@
   • 首次載入 FFmpeg 引擎約需 10～20 秒，請耐心等待
 </div>
 
-<script type="module">
-import { FFmpeg } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js';
-import { fetchFile, toBlobURL } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js';
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<script>
+// 0.11.x 不需要 SharedArrayBuffer，相容 GitHub Pages
+const { createFFmpeg, fetchFile } = FFmpegWASM;
 
 const CLIENT_ID = '231331833373-7qr8qub6c5ovjr12tn1k174nhiijotr0.apps.googleusercontent.com';
 const SCOPES    = 'https://www.googleapis.com/auth/drive.file profile email';
@@ -392,20 +393,12 @@ function showUserBar(info) {
 // ── FFmpeg ────────────────────────────────────────────────
 async function initFFmpeg() {
   if (ffmpeg) return;
-
-  ffmpeg = new FFmpeg();
-  // 單執行緒版，不需要 SharedArrayBuffer，相容 GitHub Pages
-  setProgress(0, '載入 FFmpeg 引擎中，請稍候（約 10～20 秒）...');
-  await ffmpeg.load({
-    coreURL: await toBlobURL(
-      'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.js',
-      'text/javascript'
-    ),
-    wasmURL: await toBlobURL(
-      'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.wasm',
-      'application/wasm'
-    ),
+  setProgress(0, '載入 FFmpeg 引擎中，請稍候（約 15～30 秒）...');
+  ffmpeg = createFFmpeg({
+    corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
+    log: false,
   });
+  await ffmpeg.load();
   setProgress(5, 'FFmpeg 引擎載入完成');
 }
 
@@ -499,7 +492,7 @@ async function processVideo(file, needResize, needCompress) {
   const inName  = 'in_'  + Date.now() + '.mp4';
   const vf = `scale=${SPECS.w}:${SPECS.h}:force_original_aspect_ratio=decrease,pad=${SPECS.w}:${SPECS.h}:(ow-iw)/2:(oh-ih)/2`;
 
-  await ffmpeg.writeFile(inName, await fetchFile(file));
+  ffmpeg.FS('writeFile', inName, await fetchFile(file));
 
   // 決定 CRF：先用 23，若需壓縮則從 28 開始，最多試到 35
   const crfList = needCompress ? [28, 31, 34, 37] : [23];
@@ -511,16 +504,16 @@ async function processVideo(file, needResize, needCompress) {
     const args = ['-i', inName, '-c:v', 'libx264', '-crf', String(crf), '-preset', 'fast', '-c:a', 'aac', '-b:a', '96k'];
     if (needResize || needCompress) args.push('-vf', vf);
     args.push(outName);
-    await ffmpeg.exec(args);
-    const data = await ffmpeg.readFile(outName);
-    await ffmpeg.deleteFile(outName);
+    await ffmpeg.run(...args);
+    const data = ffmpeg.FS('readFile', outName);
+    ffmpeg.FS('unlink', outName);
     const sizeMB = data.byteLength / 1024 / 1024;
     outputData = data;
     usedCrf = crf;
     if (sizeMB <= SPECS.maxMB) break; // 達標就停
   }
 
-  await ffmpeg.deleteFile(inName);
+  ffmpeg.FS('unlink', inName);
   return new File([outputData.buffer], file.name.replace(/\.[^.]+$/, '_fixed.mp4'), { type:'video/mp4' });
 }
 
