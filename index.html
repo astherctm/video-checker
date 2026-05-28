@@ -289,7 +289,7 @@
 
 <div id="folderRow">
   <span class="config-label">📁 Drive 資料夾 ID</span>
-  <input class="config-input" id="folderId" placeholder="貼上 Google Drive 資料夾 ID" />
+  <input class="config-input" id="folderId" placeholder="貼上 Google Drive 資料夾 ID" value="1nJrlFOepjU5ZP2c2nFzFonDepWjMvLxY" />
   <span class="config-help">開啟目標資料夾，複製網址最後一段：drive.google.com/drive/folders/<strong style="color:var(--accent)">這一段</strong></span>
 </div>
 
@@ -340,6 +340,11 @@ let files       = [];
 let running     = false;
 
 // ── Google Identity Services ──────────────────────────────
+// 頁面載入後自動觸發登入
+window.addEventListener('load', () => {
+  setTimeout(() => window.signIn(), 800);
+});
+
 window.signIn = function() {
   if (!tokenClient) {
     tokenClient = google.accounts.oauth2.initTokenClient({
