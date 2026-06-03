@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>影片規格檢查工具</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+TC:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e0f;
+    --surface: #161618;
+    --surface2: #1f1f22;
+    --border: #2a2a2e;
+    --accent: #00e5a0;
+    --accent-dim: rgba(0,229,160,0.12);
+    --warn: #f5a623;
+    --warn-dim: rgba(245,166,35,0.12);
+    --err: #ff4d4d;
+    --err-dim: rgba(255,77,77,0.1);
+    --text: #e8e8ea;
+    --text2: #8a8a92;
+    --text3: #4a4a52;
+    --mono: 'DM Mono', monospace;
+    --sans: 'Noto Sans TC', sans-serif;
+    --radius: 10px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 20px 80px;
+  }
+
+  header { text-align: center; margin-bottom: 40px; }
+  .badge {
+    display: inline-block;
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.12em; color: var(--accent);
+    border: 1px solid var(--accent); padding: 3px 10px;
+    border-radius: 20px; margin-bottom: 16px; opacity: 0.85;
+  }
+  h1 { font-size: 28px; font-weight: 300; letter-spacing: -0.02em; margin-bottom: 8px; }
+  h1 strong { font-weight: 500; color: #fff; }
+  .sub { font-size: 13px; color: var(--text2); line-height: 1.6; }
+
+  .specs {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    justify-content: center; margin-bottom: 36px;
+  }
+  .spec-pill {
+    font-family: var(--mono); font-size: 11.5px;
+    color: var(--text2); background: var(--surface);
+    border: 1px solid var(--border); padding: 5px 12px; border-radius: 20px;
+  }
+  .spec-pill span { color: var(--accent); margin-left: 4px; }
+
+  /* ── Auth card ── */
+  #authCard {
+    width: 100%; max-width: 680px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px 32px;
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .auth-icon { font-size: 36px; margin-bottom: 16px; }
+  .auth-title { font-size: 16px; font-weight: 500; margin-bottom: 8px; }
+  .auth-sub { font-size: 13px; color: var(--text2); margin-bottom: 28px; line-height: 1.6; }
+  .btn-google {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: #fff; color: #1f1f1f;
+    font-family: var(--sans); font-size: 14px; font-weight: 500;
+    border: none; border-radius: 8px; padding: 11px 24px;
+    cursor: pointer; transition: box-shadow 0.2s, transform 0.1s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+  .btn-google:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+  .btn-google:active { transform: scale(0.98); }
+  .btn-google svg { width: 18px; height: 18px; }
+
+  /* ── User bar ── */
+  #userBar {
+    display: none;
+    width: 100%; max-width: 680px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 18px;
+    margin-bottom: 16px;
+    align-items: center; gap: 10px;
+  }
+  #userBar.show { display: flex; }
+  .user-avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--accent-dim); overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; color: var(--accent); flex-shrink: 0;
+  }
+  .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .user-name { font-size: 13px; font-weight: 500; flex: 1; }
+  .user-email { font-size: 11px; color: var(--text2); font-family: var(--mono); }
+  .btn-logout {
+    font-size: 11px; color: var(--text2);
+    background: none; border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 10px; cursor: pointer;
+    font-family: var(--mono);
+  }
+  .btn-logout:hover { color: var(--err); border-color: var(--err); }
+
+  /* ── Folder row ── */
+  #folderRow {
+    display: none;
+    width: 100%; max-width: 680px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    margin-bottom: 16px;
+    align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  #folderRow.show { display: flex; }
+  .config-label { font-size: 12px; color: var(--text2); white-space: nowrap; }
+  .config-input {
+    flex: 1; min-width: 160px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px;
+    font-family: var(--mono); font-size: 12px; color: var(--text); outline: none;
+  }
+  .config-input:focus { border-color: var(--accent); }
+  .config-input::placeholder { color: var(--text3); }
+  .config-help { font-size: 11px; color: var(--text3); width: 100%; }
+
+  /* ── Main card ── */
+  #mainCard {
+    display: none;
+    width: 100%; max-width: 680px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  #mainCard.show { display: block; }
+
+  #dropzone {
+    padding: 52px 32px; text-align: center; cursor: pointer;
+    border-bottom: 1px solid var(--border); transition: background 0.2s;
+  }
+  #dropzone:hover, #dropzone.drag { background: var(--surface2); }
+  #dropzone.drag { border-color: var(--accent); }
+  .drop-icon {
+    width: 52px; height: 52px; margin: 0 auto 16px;
+    background: var(--accent-dim); border-radius: 14px;
+    display: flex; align-items: center; justify-content: center; font-size: 22px;
+  }
+  .drop-title { font-size: 15px; font-weight: 500; margin-bottom: 6px; }
+  .drop-sub { font-size: 12px; color: var(--text2); }
+  .drop-sub em { color: var(--accent); font-style: normal; }
+  #fileInput { display: none; }
+
+  #fileList { padding: 0; }
+  .file-item {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    display: grid; grid-template-columns: 1fr auto;
+    gap: 8px; align-items: start;
+    animation: slideIn 0.2s ease;
+  }
+  @keyframes slideIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; } }
+  .file-item:last-child { border-bottom: none; }
+  .file-name { font-size: 13px; font-weight: 500; margin-bottom: 4px; word-break: break-all; }
+  .file-meta { font-family: var(--mono); font-size: 11px; color: var(--text2); }
+  .file-status { text-align: right; }
+
+  .s-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-family: var(--mono);
+    padding: 3px 9px; border-radius: 20px; white-space: nowrap;
+  }
+  .s-waiting   { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+  .s-checking  { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(0,229,160,0.25); }
+  .s-fixing    { background: var(--warn-dim); color: var(--warn); border: 1px solid rgba(245,166,35,0.25); }
+  .s-uploading { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(0,229,160,0.25); }
+  .s-done      { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(0,229,160,0.3); }
+  .s-error     { background: var(--err-dim); color: var(--err); border: 1px solid rgba(255,77,77,0.25); }
+  .s-skip      { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+
+  .issues { margin-top: 6px; }
+  .issue-tag {
+    display: inline-block; font-size: 10.5px; font-family: var(--mono);
+    color: var(--warn); background: var(--warn-dim);
+    border-radius: 4px; padding: 1px 6px; margin: 2px 3px 0 0;
+  }
+  .issue-tag.fixed { color: var(--accent); background: var(--accent-dim); }
+
+  .progress-wrap { padding: 0 20px 16px; display: none; }
+  .progress-wrap.show { display: block; }
+  .progress-bar-bg { height: 3px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s; width: 0%; }
+  .progress-text { font-family: var(--mono); font-size: 11px; color: var(--text2); margin-top: 8px; text-align: center; }
+
+  .action-wrap { padding: 20px; border-top: 1px solid var(--border); display: none; }
+  .action-wrap.show { display: block; }
+  .btn-run {
+    width: 100%; padding: 13px;
+    background: var(--accent); color: #000;
+    font-family: var(--sans); font-size: 14px; font-weight: 500;
+    border: none; border-radius: var(--radius); cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  .btn-run:hover { opacity: 0.88; }
+  .btn-run:active { transform: scale(0.99); }
+  .btn-run:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  #summary { width: 100%; max-width: 680px; display: none; gap: 10px; }
+  #summary.show { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .sum-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; text-align: center; }
+  .sum-num { font-size: 30px; font-weight: 300; margin-bottom: 4px; }
+  .sum-lbl { font-size: 11px; color: var(--text2); font-family: var(--mono); }
+  .sum-card.pass .sum-num { color: var(--accent); }
+  .sum-card.warn .sum-num { color: var(--warn); }
+
+  .notice {
+    width: 100%; max-width: 680px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 18px;
+    font-size: 12px; color: var(--text2); line-height: 1.7; margin-top: 4px;
+  }
+  .notice strong { color: var(--text); }
+  .notice a { color: var(--accent); }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    display: inline-block; width: 10px; height: 10px;
+    border: 1.5px solid currentColor; border-top-color: transparent;
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="badge">VIDEO SPEC CHECKER</div>
+  <h1><strong>影片規格</strong>自動檢查工具</h1>
+  <p class="sub">登入 Google 帳號 · 拖曳影片全自動處理 · 完成後上傳 Drive</p>
+</header>
+
+<div class="specs">
+  <div class="spec-pill">長度<span>≤ 30s</span></div>
+  <div class="spec-pill">尺寸<span>1080×1920</span></div>
+  <div class="spec-pill">比例<span>9:16</span></div>
+  <div class="spec-pill">格式<span>MP4</span></div>
+  <div class="spec-pill">大小<span>≤ 30MB</span></div>
+  <div class="spec-pill">編碼<span>H.264</span></div>
+</div>
+
+<!-- 登入前顯示 -->
+<div id="authCard">
+  <div class="auth-icon">🔐</div>
+  <div class="auth-title">使用 Google 帳號登入</div>
+  <div class="auth-sub">登入後即可上傳影片並自動存入你的 Google Drive<br>工具不會儲存你的任何資料</div>
+  <button class="btn-google" onclick="signIn()">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+    使用 Google 帳號登入
+  </button>
+</div>
+
+<!-- 登入後顯示 -->
+<div id="userBar">
+  <div class="user-avatar" id="userAvatar">👤</div>
+  <div style="flex:1">
+    <div class="user-name" id="userName"></div>
+    <div class="user-email" id="userEmail"></div>
+  </div>
+  <button class="btn-logout" onclick="signOut()">登出</button>
+</div>
+
+<div id="folderRow">
+  <span class="config-label">📁 Drive 資料夾 ID</span>
+  <input class="config-input" id="folderId" placeholder="貼上 Google Drive 資料夾 ID" value="1nJrlFOepjU5ZP2c2nFzFonDepWjMvLxY" />
+  <span class="config-help">開啟目標資料夾，複製網址最後一段：drive.google.com/drive/folders/<strong style="color:var(--accent)">這一段</strong></span>
+</div>
+
+<div id="mainCard">
+  <div id="dropzone" onclick="document.getElementById('fileInput').click()">
+    <div class="drop-icon">🎬</div>
+    <div class="drop-title">拖曳影片到這裡</div>
+    <div class="drop-sub">或點此選擇檔案 · 支援 <em>MP4 MOV AVI MKV</em> · 可多選</div>
+    <input type="file" id="fileInput" multiple accept="video/*">
+  </div>
+  <div id="fileList"></div>
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+    <div class="progress-text" id="progressText">準備中...</div>
+  </div>
+  <div class="action-wrap" id="actionWrap">
+    <div style="display:flex;gap:10px;margin-bottom:10px;">
+      <button class="btn-run" id="btnRun" onclick="runAll(false)" style="flex:1">▶ 全部處理</button>
+      <button class="btn-run" id="btnRetry" onclick="runAll(true)" style="flex:1;background:var(--warn);color:#000">↺ 只處理失敗</button>
+    </div>
+    <button class="btn-run" onclick="resetAll()" style="background:var(--surface2);color:var(--text2);border:1px solid var(--border);width:100%">✕ 清除重置</button>
+  </div>
+</div>
+
+<div id="summary">
+  <div class="sum-card pass"><div class="sum-num" id="sumPass">0</div><div class="sum-lbl">✓ 通過 / 已修正</div></div>
+  <div class="sum-card warn"><div class="sum-num" id="sumFail">0</div><div class="sum-lbl">✕ 需手動處理</div></div>
+  <div class="sum-card pass"><div class="sum-num" id="sumSkip">0</div><div class="sum-lbl">↑ 已上傳 Drive</div></div>
+</div>
+
+<div class="notice">
+  <strong>注意事項</strong><br>
+  • 影片處理完全在瀏覽器本地進行，不會上傳到任何第三方伺服器<br>
+  • 比例不符（非 9:16）、長度超過 30 秒、檔案超過 30MB 需手動處理<br>
+  • 首次載入 FFmpeg 引擎約需 10～20 秒，請耐心等待
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<script>
+// 0.11.x 不需要 SharedArrayBuffer，相容 GitHub Pages
+const { createFFmpeg, fetchFile } = FFmpeg;
+
+const CLIENT_ID = '231331833373-7qr8qub6c5ovjr12tn1k174nhiijotr0.apps.googleusercontent.com';
+const SCOPES    = 'https://www.googleapis.com/auth/drive.file profile email';
+const SPECS     = { w:1080, h:1920, maxSec:30.5, maxMB:30, fmt:'mp4' };
+const ASPECT    = 9/16;
+const TOLERANCE = 0.05;
+
+let tokenClient = null;
+let accessToken = null;
+let ffmpeg      = null;
+let files       = [];
+let running     = false;
+
+// ── Google OAuth 重新導向登入 ────────────────────────────
+const REDIRECT_URI = window.location.origin + window.location.pathname;
+
+window.signIn = function() {
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    response_type: 'token',
+    scope: SCOPES,
+    include_granted_scopes: 'true',
+  });
+  window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+};
+
+window.signOut = function() {
+  accessToken = null;
+  sessionStorage.removeItem('gtoken');
+  document.getElementById('authCard').style.display = 'block';
+  document.getElementById('userBar').classList.remove('show');
+  document.getElementById('folderRow').classList.remove('show');
+  document.getElementById('mainCard').classList.remove('show');
+  document.getElementById('summary').classList.remove('show');
+  files = [];
+  document.getElementById('fileList').innerHTML = '';
+  document.getElementById('actionWrap').classList.remove('show');
+  window.history.replaceState({}, document.title, window.location.pathname);
+};
+
+// 頁面載入時檢查 URL hash 是否有 token（OAuth redirect 回來）
+window.addEventListener('load', async () => {
+  const hash = new URLSearchParams(window.location.hash.slice(1));
+  const token = hash.get('access_token') || sessionStorage.getItem('gtoken');
+  if (token) {
+    accessToken = token;
+    sessionStorage.setItem('gtoken', token);
+    window.history.replaceState({}, document.title, window.location.pathname);
+    try {
+      const info = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${token}` }
+      }).then(r => r.json());
+      if (info.email) showUserBar(info);
+      else window.signIn();
+    } catch(e) { window.signIn(); }
+  }
+});
+
+function showUserBar(info) {
+  document.getElementById('authCard').style.display = 'none';
+  const bar = document.getElementById('userBar');
+  bar.classList.add('show');
+  document.getElementById('userName').textContent  = info.name  || '';
+  document.getElementById('userEmail').textContent = info.email || '';
+  const av = document.getElementById('userAvatar');
+  if (info.picture) av.innerHTML = `<img src="${info.picture}">`;
+  document.getElementById('folderRow').classList.add('show');
+  document.getElementById('mainCard').classList.add('show');
+}
+
+// ── FFmpeg ────────────────────────────────────────────────
+async function initFFmpeg() {
+  if (ffmpeg) return;
+  setProgress(0, '載入 FFmpeg 引擎中，請稍候（約 15～30 秒）...');
+  ffmpeg = createFFmpeg({
+    corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
+    log: false,
+  });
+  await ffmpeg.load();
+  setProgress(5, 'FFmpeg 引擎載入完成');
+}
+
+// ── Drop / File select ────────────────────────────────────
+const dropzone   = document.getElementById('dropzone');
+const fileInput  = document.getElementById('fileInput');
+const actionWrap = document.getElementById('actionWrap');
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  addFiles([...e.dataTransfer.files]);
+});
+fileInput.addEventListener('change', () => addFiles([...fileInput.files]));
+
+function addFiles(newFiles) {
+  newFiles.filter(f => f.type.startsWith('video/') || /\.(mp4|mov|avi|mkv|webm|m4v)$/i.test(f.name))
+    .forEach(f => {
+      files.push({ file: f, status: 'waiting', issues: [] });
+      renderItem(files.length - 1);
+    });
+  if (files.length > 0) actionWrap.classList.add('show');
+}
+
+function renderItem(i) {
+  const { file, status, issues } = files[i];
+  const id = `fi-${i}`;
+  const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+  const statusMap = {
+    waiting:   `<span class="s-badge s-waiting">待處理</span>`,
+    checking:  `<span class="s-badge s-checking"><span class="spinner"></span> 檢查中</span>`,
+    fixing:    `<span class="s-badge s-fixing"><span class="spinner"></span> 調整尺寸</span>`,
+    uploading: `<span class="s-badge s-uploading"><span class="spinner"></span> 上傳中</span>`,
+    done:      `<span class="s-badge s-done">✓ 完成</span>`,
+    error:     `<span class="s-badge s-error">✕ 錯誤</span>`,
+    skip:      `<span class="s-badge s-skip">需手動處理</span>`,
+  };
+  const issueTags = issues.map(iss =>
+    `<span class="issue-tag ${iss.fixed?'fixed':''}">${iss.label}</span>`
+  ).join('');
+  const html = `
+    <div class="file-item" id="${id}">
+      <div>
+        <div class="file-name">${file.name}</div>
+        <div class="file-meta">${sizeMB} MB</div>
+        ${issueTags ? `<div class="issues">${issueTags}</div>` : ''}
+      </div>
+      <div class="file-status">${statusMap[status]||''}</div>
+    </div>`;
+  const el = document.getElementById(id);
+  if (el) el.outerHTML = html; else document.getElementById('fileList').insertAdjacentHTML('beforeend', html);
+}
+
+function updateStatus(i, status) { files[i].status = status; renderItem(i); }
+function setProgress(pct, text) {
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = text;
+}
+
+function getVideoInfo(file) {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement('video');
+    v.preload = 'auto';
+    v.muted = true;
+    const done = () => {
+      const needsTranscode = file.type === 'video/mp4' &&
+        v.canPlayType('video/mp4; codecs="mp4v.20.8"') !== '' &&
+        v.canPlayType('video/mp4; codecs="avc1.42E01E"') === '';
+      resolve({ w: v.videoWidth, h: v.videoHeight, dur: v.duration, needsTranscode });
+      URL.revokeObjectURL(url);
+    };
+    v.onloadeddata = done;
+    v.onloadedmetadata = () => { if (v.videoWidth > 0) done(); };
+    v.onerror = () => resolve({ w:0, h:0, dur:0, needsTranscode: false });
+    v.src = url;
+  });
+}
+
+function checkSpecs(info, file) {
+  const issues = [];
+  const sizeMB = file.size / 1024 / 1024;
+  const ratio  = info.w / info.h;
+  if (info.dur > SPECS.maxSec)                              issues.push({ label:`長度 ${info.dur.toFixed(1)}s`, canFix:false });
+  if (info.w !== SPECS.w || info.h !== SPECS.h) {
+    const ratioOk = Math.abs(ratio - ASPECT) <= TOLERANCE;
+    const smaller = (info.w > 0 && info.h > 0) && (info.w < SPECS.w || info.h < SPECS.h);
+    if (smaller) {
+      // 小尺寸：不自動處理，建議重新提供
+      issues.push({ label:`尺寸 ${info.w}×${info.h}（建議重新提供高解析度檔案）`, canFix:false, type:'resize' });
+    } else if (ratioOk) {
+      // 大尺寸且比例符合：自動縮放
+      issues.push({ label:`尺寸 ${info.w}×${info.h}`, canFix:true, type:'resize' });
+    } else {
+      // 比例不符：無法自動處理
+      issues.push({ label:`尺寸 ${info.w}×${info.h}（比例不符 9:16）`, canFix:false, type:'resize' });
+    }
+  }
+  if (Math.abs(ratio - ASPECT) > TOLERANCE)                 issues.push({ label:`比例不符 9:16`, canFix:false });
+  if (!/\.mp4$/i.test(file.name))                           issues.push({ label:`格式非 MP4`, canFix:true, type:'format' });
+  if (sizeMB > SPECS.maxMB)                                 issues.push({ label:`大小 ${sizeMB.toFixed(1)}MB`, canFix:true, type:'compress' });
+  // 所有影片都確保輸出為 H.264（處理 mpeg4 等非標準編碼）
+  // 若已有其他需要 FFmpeg 的問題（resize/compress）則不重複標記
+  const needsFFmpeg = issues.some(i => i.canFix);
+  if (!needsFFmpeg) {
+    // 尺寸和大小都符合，但仍需確認編碼，統一重新編碼
+    issues.push({ label:`確保 H.264 編碼`, canFix:true, type:'transcode' });
+  }
+  return issues;
+}
+
+// 估算目標 CRF：二分搜尋壓縮率直到檔案小於 30MB
+async function processVideo(file, needResize, needCompress, info) {
+  await initFFmpeg();
+  const inName  = 'in_'  + Date.now() + '.mp4';
+  // 比例符合 9:16 → 直接縮放（含放大），不補黑邊
+  // 比例不符 → 縮放後補黑邊
+  const aspectOk = Math.abs((info.w / info.h) - ASPECT) <= TOLERANCE;
+  const vf = aspectOk
+    ? `scale=${SPECS.w}:${SPECS.h}`
+    : `scale=${SPECS.w}:${SPECS.h}:force_original_aspect_ratio=decrease,pad=${SPECS.w}:${SPECS.h}:(ow-iw)/2:(oh-ih)/2,setsar=1`;
+
+  ffmpeg.FS('writeFile', inName, await fetchFile(file));
+
+  // 決定 CRF：先用 23，若需壓縮則從 28 開始，最多試到 35
+  const crfList = needCompress ? [28, 31, 34, 37] : [23];
+  let outputData = null;
+  let usedCrf = 23;
+
+  for (const crf of crfList) {
+    const outName = 'out_' + Date.now() + '.mp4';
+    const args = ['-i', inName, '-c:v', 'libx264', '-crf', String(crf), '-preset', 'fast', '-c:a', 'aac', '-b:a', '96k'];
+    if (needResize || needCompress) args.push('-vf', vf);
+    args.push(outName);
+    await ffmpeg.run(...args);
+    const data = ffmpeg.FS('readFile', outName);
+    ffmpeg.FS('unlink', outName);
+    const sizeMB = data.byteLength / 1024 / 1024;
+    outputData = data;
+    usedCrf = crf;
+    if (sizeMB <= SPECS.maxMB) break; // 達標就停
+  }
+
+  ffmpeg.FS('unlink', inName);
+  return new File([outputData.buffer], file.name.replace(/\.[^.]+$/, '_resize.mp4'), { type:'video/mp4' });
+}
+
+async function uploadToDrive(file, folderId) {
+  const meta = JSON.stringify({ name: file.name, parents: [folderId] });
+  const form = new FormData();
+  form.append('metadata', new Blob([meta], { type:'application/json' }));
+  form.append('file', file);
+  const res = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
+    { method:'POST', headers:{ Authorization:`Bearer ${accessToken}` }, body: form }
+  );
+  if (!res.ok) throw new Error(`上傳失敗 ${res.status}`);
+  return res.json();
+}
+
+// ── 主流程 ────────────────────────────────────────────────
+window.resetAll = function() {
+  files = [];
+  running = false;
+  document.getElementById('fileList').innerHTML = '';
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('progressText').textContent = '準備中...';
+  document.getElementById('progressWrap').classList.remove('show');
+  document.getElementById('actionWrap').classList.remove('show');
+  document.getElementById('summary').classList.remove('show');
+  document.getElementById('sumPass').textContent = '0';
+  document.getElementById('sumFail').textContent = '0';
+  document.getElementById('sumSkip').textContent = '0';
+  document.getElementById('btnRun').textContent = '▶ 全部處理';
+  document.getElementById('btnRun').disabled = false;
+  document.getElementById('fileInput').value = '';
+};
+
+window.runAll = async function(retryOnly = false) {
+  if (running) return;
+  const folderId = document.getElementById('folderId').value.trim();
+  if (!accessToken) { alert('請先登入 Google 帳號'); return; }
+  if (!folderId)    { alert('請填入 Google Drive 資料夾 ID'); return; }
+
+  running = true;
+  const btn = document.getElementById('btnRun');
+  btn.disabled = true; btn.textContent = '處理中...';
+  document.getElementById('progressWrap').classList.add('show');
+
+  let passed = 0, failed = 0, uploaded = 0;
+  const total = files.length;
+
+  for (let i = 0; i < files.length; i++) {
+    const entry = files[i];
+    // 跳過已完成的（retryOnly 模式只處理 error/skip）
+    if (retryOnly && entry.status === 'done') { passed++; uploaded++; continue; }
+    if (!retryOnly && entry.status === 'done') { passed++; uploaded++; continue; }
+    setProgress(Math.round(i/total*100), `[${i+1}/${total}] 檢查：${entry.file.name}`);
+    updateStatus(i, 'checking');
+
+    const info   = await getVideoInfo(entry.file);
+    const issues = checkSpecs(info, entry.file);
+    files[i].issues = issues.map(iss => ({...iss, fixed:false}));
+
+    const unfixable = issues.filter(iss => !iss.canFix);
+    const fixable   = issues.filter(iss =>  iss.canFix);
+
+    if (unfixable.length > 0) { updateStatus(i, 'skip'); failed++; continue; }
+
+    let outputFile = entry.file;
+    if (fixable.length > 0) {
+      const needResize    = fixable.some(f => f.type === 'resize' || f.type === 'format');
+      const needCompress  = fixable.some(f => f.type === 'compress');
+      const needTranscode = fixable.some(f => f.type === 'transcode');
+      const statusLabel  = needCompress ? '壓縮 + 調整尺寸' : '調整尺寸';
+      updateStatus(i, 'fixing');
+      setProgress(Math.round(i/total*100), `[${i+1}/${total}] ${statusLabel}：${entry.file.name}`);
+      try {
+        outputFile = await processVideo(entry.file, needResize || needCompress || needTranscode, needCompress, info);
+        files[i].issues = issues.map(iss => ({...iss, fixed:true}));
+      } catch(e) {
+        const msg = (e && e.message) ? e.message.slice(0,100) : String(e).slice(0,100);
+        console.error('processVideo error:', e);
+        files[i].issues = [{ label:'錯誤：' + msg, canFix:false, fixed:false }];
+        updateStatus(i, 'error'); failed++; continue;
+      }
+    }
+
+    updateStatus(i, 'uploading');
+    setProgress(Math.round((i+0.7)/total*100), `[${i+1}/${total}] 上傳 Drive：${outputFile.name}`);
+    try {
+      await uploadToDrive(outputFile, folderId);
+      updateStatus(i, 'done'); passed++; uploaded++;
+    } catch(e) {
+      const msg = (e && e.message) ? e.message.slice(0,80) : String(e).slice(0,80);
+      files[i].issues.push({ label:`上傳失敗：${msg}`, canFix:false, fixed:false });
+      updateStatus(i, 'error'); failed++;
+    }
+  }
+
+  setProgress(100, `完成！${passed} 個成功上傳，${failed} 個需手動處理`);
+  document.getElementById('sumPass').textContent = passed;
+  document.getElementById('sumFail').textContent = failed;
+  document.getElementById('sumSkip').textContent = uploaded;
+  document.getElementById('summary').classList.add('show');
+  btn.textContent = '▶ 再次處理'; btn.disabled = false;
+  running = false;
+};
+</script>
+</body>
+</html>
